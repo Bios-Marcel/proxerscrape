@@ -1,4 +1,4 @@
-module github.com/Bios-Marcel/proxer-profile-scrape
+module github.com/Bios-Marcel/proxerscrape
 
 go 1.17
 

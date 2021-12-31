@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"os"
 	"time"
+
+	parse "github.com/Bios-Marcel/proxerscrape"
 )
 
 func main() {
-	watchlist, parseError := Parse(os.Stdin)
+	watchlist, parseError := parse.Parse(os.Stdin)
 	if parseError != nil {
 		panic(parseError)
 	}
@@ -30,13 +32,13 @@ func main() {
 	fmt.Printf("%s hours on currently watching list.\n", currentlyWatchingLeft)
 }
 
-func getWatchtimeLeft(anime Anime) time.Duration {
+func getWatchtimeLeft(anime parse.Anime) time.Duration {
 	switch anime.Type {
-	case Series:
+	case parse.Series:
 		return time.Duration(time.Duration(anime.EpisodeCount-anime.EpisodesWatched) * 20 * time.Minute)
-	case Movie:
+	case parse.Movie:
 		return time.Duration(90 * time.Minute)
-	case Special:
+	case parse.Special:
 		//What to put here?
 		return time.Duration(time.Duration(anime.EpisodeCount-anime.EpisodesWatched) * 7 * time.Minute)
 	}
