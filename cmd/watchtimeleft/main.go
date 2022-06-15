@@ -15,15 +15,15 @@ func main() {
 	}
 
 	var currentlyWatchingLeft time.Duration
-	fmt.Printf("Currently Watching (%d)\n", len(watchlist.CurrentlyWatching))
-	for _, item := range watchlist.CurrentlyWatching {
+	fmt.Printf("Currently Watching (%d)\n", len(watchlist.CurrentlyWatching.Data))
+	for _, item := range watchlist.CurrentlyWatching.Data {
 		currentlyWatchingLeft += getWatchtimeLeft(item)
 		fmt.Println(item.Title)
 	}
 
-	fmt.Printf("\nTo Watch (%d)\n", len(watchlist.ToWatch))
+	fmt.Printf("\nTo Watch (%d)\n", len(watchlist.ToWatch.Data))
 	var toWatchLeft time.Duration
-	for _, item := range watchlist.ToWatch {
+	for _, item := range watchlist.ToWatch.Data {
 		toWatchLeft += getWatchtimeLeft(item)
 		fmt.Println(item.Title)
 	}
@@ -32,7 +32,7 @@ func main() {
 	fmt.Printf("%s hours on currently watching list.\n", currentlyWatchingLeft)
 }
 
-func getWatchtimeLeft(anime parse.Anime) time.Duration {
+func getWatchtimeLeft(anime *parse.Anime) time.Duration {
 	switch anime.Type {
 	case parse.Series:
 		return time.Duration(time.Duration(anime.EpisodeCount-anime.EpisodesWatched) * 20 * time.Minute)

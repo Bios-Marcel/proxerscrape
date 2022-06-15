@@ -1,11 +1,16 @@
 package proxerscrape
 
 import (
+	"errors"
 	"fmt"
 	"io"
+	"log"
 	"regexp"
+	"strconv"
+	"strings"
 
 	"github.com/PuerkitoBio/goquery"
+	"golang.org/x/net/html"
 )
 
 type AnimeType string
@@ -17,17 +22,108 @@ const (
 )
 
 type Anime struct {
+	// Data present in profile
+
 	EpisodesWatched uint16
 	EpisodeCount    uint16
 	Title           string
 	Type            AnimeType
+	ProxerURL       string
+
+	// Lazy data
+
+	Rating float64
+}
+
+type WatchlistCategory struct {
+	Data []*Anime
+	// extraDataLoaded tells whether the list already contains additional data
+	// such as ratings, generes and other things not present on the profile
+	// page. This flag prevents loading this data multiple times, since it is
+	// constant data.
+	extraDataLoaded bool
+}
+
+// LoadExtraData will retrieve additional information for all animes in this
+// category and load it into the respective *Anime. Calling this a second time
+// will not have an effect.
+func (wc *WatchlistCategory) LoadExtraData(retrieveRawData func(*Anime) (io.ReadCloser, CacheInvalidator, error)) error {
+	if wc.extraDataLoaded {
+		return nil
+	}
+
+	// This loop only returns an error if we run into an error that's not
+	//related to data, but something that's most likely a coding
+	//error / feature not implemented.
+	for _, anime := range wc.Data {
+		reader, cacheInvalidator, err := retrieveRawData(anime)
+		if err != nil {
+			return err
+		}
+		defer reader.Close()
+
+		document, errParse := goquery.NewDocumentFromReader(reader)
+		if errParse != nil {
+			return errParse
+		}
+
+		// Proxer keeps list entries even if the linked entry doesn't exist
+		// anymore. Even picture and name still being presented isn't an
+		// indicator.
+		// FIXME If this happens again, I should check whether the "state"
+		// field is relevant.
+		title := document.Find("title").First().Get(0).FirstChild.Data
+		if strings.Contains(title, "404") {
+			log.Printf("Entry for '%s'(%s) is a dead link.\n", anime.Title, anime.ProxerURL)
+			// Since we don't want to cache a 404 page, we need to invoke
+			// the invalidator.
+			if errInvalidate := cacheInvalidator(); errInvalidate != nil {
+				log.Printf("Error invalidating cache entry for '%s': %s.\n", anime.Title, errInvalidate)
+			}
+			continue
+		}
+
+		//FIXME Provide way to login.
+		potentialPleaseLoginTitle := document.Find("h3").First()
+		if potentialPleaseLoginTitle.Length() == 1 &&
+			strings.HasPrefix(
+				strings.TrimSpace(potentialPleaseLoginTitle.Get(0).FirstChild.Data),
+				"Bitte logge dich ein",
+			) {
+			log.Printf("Entry for '%s'(%s) requries a login, since the rating is most likeky 18+.\n", anime.Title, anime.ProxerURL)
+			log.Println("If you wish to be able to retrieve these entries, please set the environment variables `LOGIN_COOKIE_KEY` and `LOGIN_COOKIE_VALUE` to `joomla_remember_me_XXX=XXX`.")
+			// Since we don't want to cache a "please login ..." page, we need
+			// to invoke the invalidator.
+			if errInvalidate := cacheInvalidator(); errInvalidate != nil {
+				log.Printf("Error invalidating cache entry for '%s': %s.\n", anime.Title, errInvalidate)
+			}
+			continue
+		}
+
+		// Ratelimited, this is a coding error.
+		if document.Find("script[src='//www.google.com/recaptcha/api.js']").Length() > 0 {
+			return errors.New("proxer.me ratelimit has been hit, captcha required")
+		}
+
+		avgMatches := document.Find(".average").First()
+		ratingString := avgMatches.Get(0).FirstChild.Data
+		ratingFloat, errParse := strconv.ParseFloat(ratingString, 64)
+		if errParse != nil {
+			return errParse
+		}
+
+		anime.Rating = ratingFloat
+	}
+
+	wc.extraDataLoaded = true
+	return nil
 }
 
 type Watchlist struct {
-	Watched           []Anime
-	CurrentlyWatching []Anime
-	ToWatch           []Anime
-	StoppedWatching   []Anime
+	Watched           WatchlistCategory
+	CurrentlyWatching WatchlistCategory
+	ToWatch           WatchlistCategory
+	StoppedWatching   WatchlistCategory
 }
 
 func Parse(reader io.Reader) (Watchlist, error) {
@@ -37,28 +133,41 @@ func Parse(reader io.Reader) (Watchlist, error) {
 		return watchlist, parseError
 	}
 
-	watchlist.Watched = parseTable(document.Find("a[name=state0]").Next())
-	watchlist.CurrentlyWatching = parseTable(document.Find("a[name=state1]").Next())
-	watchlist.ToWatch = parseTable(document.Find("a[name=state2]").Next())
-	watchlist.StoppedWatching = parseTable(document.Find("a[name=state3]").Next())
+	watchlist.Watched = WatchlistCategory{Data: parseTable(document.Find("a[name=state0]").Next())}
+	watchlist.CurrentlyWatching = WatchlistCategory{Data: parseTable(document.Find("a[name=state1]").Next())}
+	watchlist.ToWatch = WatchlistCategory{Data: parseTable(document.Find("a[name=state2]").Next())}
+	watchlist.StoppedWatching = WatchlistCategory{Data: parseTable(document.Find("a[name=state3]").Next())}
 
 	return watchlist, nil
 }
 
-func parseTable(table *goquery.Selection) []Anime {
+func getAttribute(node *html.Node, name string) string {
+	for _, attr := range node.Attr {
+		if strings.EqualFold(attr.Key, name) {
+			return attr.Val
+		}
+	}
+
+	return ""
+}
+
+func parseTable(table *goquery.Selection) []*Anime {
 	spaceCleaner := regexp.MustCompile(`\s{2,}`)
 	rows := table.Children().Children()
-	animes := make([]Anime, 0, rows.Size()-2)
+	animes := make([]*Anime, 0, rows.Size()-2)
 	rows.Each(func(i int, s *goquery.Selection) {
 		if i >= 2 {
 			cells := s.Children()
 			//First is just the status image, so we skip it.
 			cell := cells.First().Next()
+			link := cell.Find("a").Get(0)
 
 			anime := Anime{}
 
+			anime.ProxerURL = getAttribute(link, "href")
+
 			//Name
-			anime.Title = spaceCleaner.ReplaceAllString(cell.Find("a").Get(0).FirstChild.Data, " ")
+			anime.Title = spaceCleaner.ReplaceAllString(link.FirstChild.Data, " ")
 
 			//Type of Anime
 			cell = cell.Next()
@@ -74,7 +183,7 @@ func parseTable(table *goquery.Selection) []Anime {
 				panic(scanError)
 			}
 
-			animes = append(animes, anime)
+			animes = append(animes, &anime)
 		}
 	})
 
