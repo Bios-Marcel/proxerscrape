@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/PuerkitoBio/goquery"
 	"golang.org/x/net/html"
@@ -66,71 +67,92 @@ func (wc *WatchlistCategory) LoadExtraData(retrieveRawData func(*Anime) (io.Read
 		return nil
 	}
 
+	var waitGroup sync.WaitGroup
+	errChannel := make(chan error)
+	doneChannel := make(chan struct{})
+	go func() {
+		waitGroup.Wait()
+		doneChannel <- struct{}{}
+	}()
+
 	// This loop only returns an error if we run into an error that's not
 	//related to data, but something that's most likely a coding
 	//error / feature not implemented.
 	for _, anime := range wc.Data {
-		reader, cacheInvalidator, err := retrieveRawData(anime)
-		if err != nil {
-			return err
-		}
-		defer reader.Close()
-
-		document, errParse := goquery.NewDocumentFromReader(reader)
-		if errParse != nil {
-			return errParse
-		}
-
-		// Proxer keeps list entries even if the linked entry doesn't exist
-		// anymore. Even picture and name still being presented isn't an
-		// indicator.
-		// FIXME If this happens again, I should check whether the "state"
-		// field is relevant.
-		title := document.Find("title").First().Get(0).FirstChild.Data
-		if strings.Contains(title, "404") {
-			log.Printf("Entry for '%s'(%s) is a dead link.\n", anime.Title, anime.ProxerURL)
-			// Since we don't want to cache a 404 page, we need to invoke
-			// the invalidator.
-			if errInvalidate := cacheInvalidator(); errInvalidate != nil {
-				log.Printf("Error invalidating cache entry for '%s': %s.\n", anime.Title, errInvalidate)
+		waitGroup.Add(1)
+		go func(anime *Anime) {
+			defer waitGroup.Done()
+			reader, cacheInvalidator, err := retrieveRawData(anime)
+			if err != nil {
+				errChannel <- err
+				return
 			}
-			continue
-		}
+			defer reader.Close()
 
-		//FIXME Provide way to login.
-		potentialPleaseLoginTitle := document.Find("h3").First()
-		if potentialPleaseLoginTitle.Length() == 1 &&
-			strings.HasPrefix(
-				strings.TrimSpace(potentialPleaseLoginTitle.Get(0).FirstChild.Data),
-				"Bitte logge dich ein",
-			) {
-			log.Printf("Entry for '%s'(%s) requries a login, since the rating is most likeky 18+.\n", anime.Title, anime.ProxerURL)
-			log.Println("If you wish to be able to retrieve these entries, please set the environment variables `LOGIN_COOKIE_KEY` and `LOGIN_COOKIE_VALUE` to `joomla_remember_me_XXX=XXX`.")
-			// Since we don't want to cache a "please login ..." page, we need
-			// to invoke the invalidator.
-			if errInvalidate := cacheInvalidator(); errInvalidate != nil {
-				log.Printf("Error invalidating cache entry for '%s': %s.\n", anime.Title, errInvalidate)
+			document, errParse := goquery.NewDocumentFromReader(reader)
+			if errParse != nil {
+				errChannel <- errParse
+				return
 			}
-			continue
-		}
 
-		// Ratelimited, this is a coding error.
-		if document.Find("script[src='//www.google.com/recaptcha/api.js']").Length() > 0 {
-			return errors.New("proxer.me ratelimit has been hit, captcha required")
-		}
+			// Proxer keeps list entries even if the linked entry doesn't exist
+			// anymore. Even picture and name still being presented isn't an
+			// indicator.
+			// FIXME If this happens again, I should check whether the "state"
+			// field is relevant.
+			title := document.Find("title").First().Get(0).FirstChild.Data
+			if strings.Contains(title, "404") {
+				log.Printf("Entry for '%s'(%s) is a dead link.\n", anime.Title, anime.ProxerURL)
+				// Since we don't want to cache a 404 page, we need to invoke
+				// the invalidator.
+				if errInvalidate := cacheInvalidator(); errInvalidate != nil {
+					log.Printf("Error invalidating cache entry for '%s': %s.\n", anime.Title, errInvalidate)
+				}
+				return
+			}
 
-		avgMatches := document.Find(".average").First()
-		ratingString := avgMatches.Get(0).FirstChild.Data
-		ratingFloat, errParse := strconv.ParseFloat(ratingString, 64)
-		if errParse != nil {
-			return errParse
-		}
+			//FIXME Provide way to login.
+			potentialPleaseLoginTitle := document.Find("h3").First()
+			if potentialPleaseLoginTitle.Length() == 1 &&
+				strings.HasPrefix(
+					strings.TrimSpace(potentialPleaseLoginTitle.Get(0).FirstChild.Data),
+					"Bitte logge dich ein",
+				) {
+				log.Printf("Entry for '%s'(%s) requries a login, since the rating is most likeky 18+.\n", anime.Title, anime.ProxerURL)
+				log.Println("If you wish to be able to retrieve these entries, please set the environment variables `LOGIN_COOKIE_KEY` and `LOGIN_COOKIE_VALUE` to `joomla_remember_me_XXX=XXX`.")
+				// Since we don't want to cache a "please login ..." page, we need
+				// to invoke the invalidator.
+				if errInvalidate := cacheInvalidator(); errInvalidate != nil {
+					log.Printf("Error invalidating cache entry for '%s': %s.\n", anime.Title, errInvalidate)
+				}
+				return
+			}
 
-		anime.Rating = ratingFloat
+			// Ratelimited, this is a coding error.
+			if document.Find("script[src='//www.google.com/recaptcha/api.js']").Length() > 0 {
+				errChannel <- errors.New("proxer.me ratelimit has been hit, captcha required")
+				return
+			}
+
+			avgMatches := document.Find(".average").First()
+			ratingString := avgMatches.Get(0).FirstChild.Data
+			ratingFloat, errParse := strconv.ParseFloat(ratingString, 64)
+			if errParse != nil {
+				errChannel <- errParse
+				return
+			}
+
+			anime.Rating = ratingFloat
+		}(anime)
 	}
 
-	wc.extraDataLoaded = true
-	return nil
+	select {
+	case err := <-errChannel:
+		return err
+	case <-doneChannel:
+		wc.extraDataLoaded = true
+		return nil
+	}
 }
 
 type Watchlist struct {

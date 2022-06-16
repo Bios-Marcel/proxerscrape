@@ -37,6 +37,10 @@ func getCacheIdentifier(anime *Anime) string {
 	return regexp.MustCompile(`/info/(\d+).*`).FindStringSubmatch(anime.ProxerURL)[1]
 }
 
+type Cache struct {
+	Query func(*Anime) (*http.Response, error)
+}
+
 // CacheInvalidator is a simple interface to make sure the caller of
 // RetrieveAnimeRawData know what the second parameter means. The invalidator
 // is used for removing an item from cache. This can be used by a parser if
@@ -48,7 +52,7 @@ type CacheInvalidator func() error
 // both a reader and an invalidator is returned. The invalidator can be used
 // if whatever instance receiveing the data, deems that it is invalid an should
 // be removed from cache.
-func RetrieveAnimeRawData(anime *Anime) (io.ReadCloser, CacheInvalidator, error) {
+func (cache *Cache) RetrieveAnimeRawData(anime *Anime) (io.ReadCloser, CacheInvalidator, error) {
 	cacheIdentifier := getCacheIdentifier(anime)
 	cacheFilePath := filepath.Join(cacheDir, cacheIdentifier+".html")
 	cacheInvalidator := func() error {
@@ -63,25 +67,7 @@ func RetrieveAnimeRawData(anime *Anime) (io.ReadCloser, CacheInvalidator, error)
 		return nil, nil, err
 	}
 
-	//Ensure we don't run into recaptcha.
-	rateLimiter.Wait()
-
-	request, err := http.NewRequest(http.MethodGet, "https://proxer.me"+anime.ProxerURL, nil)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	if loginCookieKey != "" && loginCookieValue != "" {
-		request.AddCookie(&http.Cookie{
-			Name:     loginCookieKey,
-			Value:    loginCookieValue,
-			Path:     "/",
-			HttpOnly: true,
-			Secure:   true,
-			SameSite: http.SameSiteStrictMode,
-		})
-	}
-	response, err := http.DefaultClient.Do(request)
+	response, err := cache.Query(anime)
 	if err != nil {
 		return nil, nil, err
 	}
