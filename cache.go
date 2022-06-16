@@ -11,9 +11,9 @@ import (
 )
 
 var (
-	// Ratelimit is 20 requests per 6 minutes, we try to stay below this by one
-	// request to make sure stuff doesn't go awry.
-	rateLimiter                                = NewLimiter(19, time.Minute*6)
+	// Ratelimit is 20 requests per 6 minutes, we try to stay below this to
+	// make sure stuff doesn't go awry.
+	rateLimiter                                = NewLimiter(15, time.Minute*6)
 	cacheDir, loginCookieKey, loginCookieValue string
 )
 
