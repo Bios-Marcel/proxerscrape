@@ -35,6 +35,29 @@ const (
 	Airing Status = "Airing"
 )
 
+// Season represents the four seasons of the year. Proxer.me represents these
+// as integers internally.
+type Season string
+
+const (
+	// Winter
+	Q1 Season = "Q1"
+	// Spring
+	Q2 Season = "Q2"
+	// Summer
+	Q3 Season = "Q3"
+	// Autumn
+	Q4 Season = "Q4"
+)
+
+type ReleasePeriod struct {
+	FromSeason Season
+	FromYear   uint
+
+	ToSeason Season
+	ToYear   uint
+}
+
 type Anime struct {
 	// Data present in profile
 
@@ -47,8 +70,9 @@ type Anime struct {
 
 	// Lazy data
 
-	Rating  float64
-	Generes []string
+	Rating        float64
+	ReleasePeriod ReleasePeriod
+	Generes       []string
 }
 
 type WatchlistCategory struct {
@@ -144,11 +168,37 @@ func (wc *WatchlistCategory) LoadExtraData(retrieveRawData func(*Anime) (io.Read
 						for _, genreNode := range cell.Next().Find("a[class=genreTag]").Nodes {
 							anime.Generes = append(anime.Generes, genreNode.FirstChild.Data)
 						}
+					}
+				case "Season":
+					{
+						children := cell.Next().Find("a").Nodes
+						if len(children) >= 1 {
+							season, year, err := parseSeason(children[0].FirstChild.Data)
+							if err != nil {
+								//TODO Handle properly; Can't return outer function or use error channel here.
+								//FIXME Make custom loop, see impl of Each(...).
+								return
+							}
 
-						//For now we break, since we don't care about the other properties.
+							anime.ReleasePeriod.FromSeason = season
+							anime.ReleasePeriod.FromYear = year
+							if len(children) >= 2 {
+								season, year, err := parseSeason(children[1].FirstChild.Data)
+								if err != nil {
+									//TODO Handle properly; Can't return outer function or use error channel here.
+									//FIXME Make custom loop, see impl of Each(...).
+									return
+								}
+
+								anime.ReleasePeriod.ToSeason = season
+								anime.ReleasePeriod.ToYear = year
+							}
+						}
 					}
 				}
 			})
+
+			log.Println(anime.ReleasePeriod)
 
 			//Rating
 			avgMatches := document.Find(".average").First()
@@ -170,6 +220,26 @@ func (wc *WatchlistCategory) LoadExtraData(retrieveRawData func(*Anime) (io.Read
 		wc.extraDataLoaded = true
 		return nil
 	}
+}
+
+func parseSeason(seasonRaw string) (Season, uint, error) {
+	var year uint
+	var seasonString string
+	if _, err := fmt.Sscanf(seasonRaw, "%s %d", &seasonString, &year); err != nil {
+		return "", 0, nil
+	}
+	var season Season
+	switch seasonString {
+	case "Winter":
+		season = Q1
+	case "Frühling":
+		season = Q2
+	case "Sommer":
+		season = Q3
+	case "Herbst":
+		season = Q4
+	}
+	return season, year, nil
 }
 
 type Watchlist struct {
