@@ -28,8 +28,8 @@ func main() {
 		fmt.Println(item.Title)
 	}
 
-	fmt.Printf("\n%s hours on to watch list.\n", toWatchLeft)
-	fmt.Printf("%s hours on currently watching list.\n", currentlyWatchingLeft)
+	fmt.Printf("\n%s hours (%d anime) on to watch list.\n", toWatchLeft, len(watchlist.ToWatch.Data))
+	fmt.Printf("%s hours (%d anime) on currently watching list.\n", currentlyWatchingLeft, len(watchlist.CurrentlyWatching.Data))
 }
 
 func getWatchtimeLeft(anime *parse.Anime) time.Duration {
