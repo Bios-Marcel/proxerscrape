@@ -47,7 +47,8 @@ type Anime struct {
 
 	// Lazy data
 
-	Rating float64
+	Rating  float64
+	Generes []string
 }
 
 type WatchlistCategory struct {
@@ -134,6 +135,22 @@ func (wc *WatchlistCategory) LoadExtraData(retrieveRawData func(*Anime) (io.Read
 				return
 			}
 
+			document.Find("table[class=details]").First().Find("tbody > tr").Each(func(i int, s *goquery.Selection) {
+				cell := s.Find("td").First()
+				key := cell.Find("b").First().Get(0).FirstChild.Data
+				switch key {
+				case "Genres":
+					{
+						for _, genreNode := range cell.Next().Find("a[class=genreTag]").Nodes {
+							anime.Generes = append(anime.Generes, genreNode.FirstChild.Data)
+						}
+
+						//For now we break, since we don't care about the other properties.
+					}
+				}
+			})
+
+			//Rating
 			avgMatches := document.Find(".average").First()
 			ratingString := avgMatches.Get(0).FirstChild.Data
 			ratingFloat, errParse := strconv.ParseFloat(ratingString, 64)
