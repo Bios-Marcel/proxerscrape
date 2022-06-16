@@ -21,6 +21,19 @@ const (
 	Movie   AnimeType = "Movie"
 )
 
+type Status string
+
+const (
+	// Finished means all episodes of have been released. This doesn't imply
+	// that all seasons have the same status.
+	Finished Status = "Abgeschlossen"
+	// PreAiring means yet to be released.
+	PreAiring = "Nicht erschienen (Pre-Airing)"
+	// Airing means the series has been released, but not all episodes have
+	// been released yet.
+	Airing = "Airing"
+)
+
 type Anime struct {
 	// Data present in profile
 
@@ -29,6 +42,7 @@ type Anime struct {
 	Title           string
 	Type            AnimeType
 	ProxerURL       string
+	Status          Status
 
 	// Lazy data
 
@@ -157,13 +171,21 @@ func parseTable(table *goquery.Selection) []*Anime {
 	animes := make([]*Anime, 0, rows.Size()-2)
 	rows.Each(func(i int, s *goquery.Selection) {
 		if i >= 2 {
-			cells := s.Children()
-			//First is just the status image, so we skip it.
-			cell := cells.First().Next()
-			link := cell.Find("a").Get(0)
-
 			anime := Anime{}
 
+			cells := s.Children()
+			cell := cells.First()
+
+			//Status
+			status, present := cell.Find("img").First().Attr("title")
+			if !present {
+				log.Panicf("Anime '%s' doesn't have a status.", anime.Title)
+			}
+			anime.Status = Status(status)
+
+			//URL to info page of anime
+			cell = cell.Next()
+			link := cell.Find("a").Get(0)
 			anime.ProxerURL = getAttribute(link, "href")
 
 			//Name
