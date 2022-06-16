@@ -29,10 +29,10 @@ const (
 	// that all seasons have the same status.
 	Finished Status = "Abgeschlossen"
 	// PreAiring means yet to be released.
-	PreAiring = "Nicht erschienen (Pre-Airing)"
+	PreAiring Status = "Nicht erschienen (Pre-Airing)"
 	// Airing means the series has been released, but not all episodes have
 	// been released yet.
-	Airing = "Airing"
+	Airing Status = "Airing"
 )
 
 type Anime struct {
