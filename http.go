@@ -24,11 +24,15 @@ func QueryRateLimited(anime *Anime) (*http.Response, error) {
 			Name:     loginCookieKey,
 			Value:    loginCookieValue,
 			Path:     "/",
+			Domain:   "proxer.me",
 			HttpOnly: true,
 			Secure:   true,
 			SameSite: http.SameSiteStrictMode,
 		})
 	}
+
+	//NOTE Adding the cookies for showing tags here doesn't work.
+
 	return http.DefaultClient.Do(request)
 }
 

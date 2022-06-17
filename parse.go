@@ -73,6 +73,11 @@ type Anime struct {
 	Rating        float64
 	ReleasePeriod ReleasePeriod
 	Generes       []string
+
+	// Tags can't be parsed, since they aren't displayed on initial pageload.
+	// Tags            []string
+	// SpoilerTags     []string
+	// UnconfirmedTags []string
 }
 
 type WatchlistCategory struct {
@@ -162,16 +167,17 @@ func (wc *WatchlistCategory) LoadExtraData(retrieveRawData func(*Anime) (io.Read
 			document.Find("table[class=details]").First().Find("tbody > tr").Each(func(i int, s *goquery.Selection) {
 				cell := s.Find("td").First()
 				key := cell.Find("b").First().Get(0).FirstChild.Data
+				cell = cell.Next()
 				switch key {
 				case "Genres":
 					{
-						for _, genreNode := range cell.Next().Find("a[class=genreTag]").Nodes {
+						for _, genreNode := range cell.Find("a[class=genreTag]").Nodes {
 							anime.Generes = append(anime.Generes, genreNode.FirstChild.Data)
 						}
 					}
 				case "Season":
 					{
-						children := cell.Next().Find("a").Nodes
+						children := cell.Find("a").Nodes
 						if len(children) >= 1 {
 							season, year, err := parseSeason(children[0].FirstChild.Data)
 							if err != nil {
