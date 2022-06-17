@@ -198,8 +198,6 @@ func (wc *WatchlistCategory) LoadExtraData(retrieveRawData func(*Anime) (io.Read
 				}
 			})
 
-			log.Println(anime.ReleasePeriod)
-
 			//Rating
 			avgMatches := document.Find(".average").First()
 			ratingString := avgMatches.Get(0).FirstChild.Data
