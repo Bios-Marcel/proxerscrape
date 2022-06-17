@@ -70,6 +70,10 @@ type Anime struct {
 
 	// Lazy data
 
+	EnglishTitle  string
+	GermanTitle   string
+	JapaneseTitle string
+	Synonyms      []string
 	Rating        float64
 	ReleasePeriod ReleasePeriod
 	Generes       []string
@@ -169,6 +173,22 @@ func (wc *WatchlistCategory) LoadExtraData(retrieveRawData func(*Anime) (io.Read
 				key := cell.Find("b").First().Get(0).FirstChild.Data
 				cell = cell.Next()
 				switch key {
+				case "Englischer Titel":
+					{
+						anime.EnglishTitle = cell.Get(0).FirstChild.Data
+					}
+				case "Deutscher Titel":
+					{
+						anime.GermanTitle = cell.Get(0).FirstChild.Data
+					}
+				case "Japanischer Titel":
+					{
+						anime.JapaneseTitle = cell.Get(0).FirstChild.Data
+					}
+				case "Synonym":
+					{
+						anime.Synonyms = append(anime.Synonyms, cell.Get(0).FirstChild.Data)
+					}
 				case "Genres":
 					{
 						for _, genreNode := range cell.Find("a[class=genreTag]").Nodes {
