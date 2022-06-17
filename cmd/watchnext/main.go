@@ -9,7 +9,7 @@ import (
 )
 
 func main() {
-	watchlist, parseError := proxerscrape.Parse(os.Stdin)
+	watchlist, parseError := proxerscrape.ParseProfileTabAnime(os.Stdin)
 	if parseError != nil {
 		panic(parseError)
 	}

@@ -9,7 +9,7 @@ import (
 )
 
 func main() {
-	watchlist, parseError := parse.Parse(os.Stdin)
+	watchlist, parseError := parse.ParseProfileTabAnime(os.Stdin)
 	if parseError != nil {
 		panic(parseError)
 	}

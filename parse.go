@@ -242,6 +242,7 @@ func parseSeason(seasonRaw string) (Season, uint, error) {
 	return season, year, nil
 }
 
+// Watchlist holds the different types of watchlists for a profile.
 type Watchlist struct {
 	Watched           WatchlistCategory
 	CurrentlyWatching WatchlistCategory
@@ -249,17 +250,21 @@ type Watchlist struct {
 	StoppedWatching   WatchlistCategory
 }
 
-func Parse(reader io.Reader) (Watchlist, error) {
+// ParseProfileTabAnime takes an HTML dump of `Anime` of a profile and parses
+// the contained watchlists. Note that the resulting Watchlist only contains
+// certain data. You'll have to call WatchlistCategory.LoadExtraData on the
+// respective lists if you require additional data.
+func ParseProfileTabAnime(reader io.Reader) (Watchlist, error) {
 	watchlist := Watchlist{}
 	document, parseError := goquery.NewDocumentFromReader(reader)
 	if parseError != nil {
 		return watchlist, parseError
 	}
 
-	watchlist.Watched = WatchlistCategory{Data: parseTable(document.Find("a[name=state0]").Next())}
-	watchlist.CurrentlyWatching = WatchlistCategory{Data: parseTable(document.Find("a[name=state1]").Next())}
-	watchlist.ToWatch = WatchlistCategory{Data: parseTable(document.Find("a[name=state2]").Next())}
-	watchlist.StoppedWatching = WatchlistCategory{Data: parseTable(document.Find("a[name=state3]").Next())}
+	watchlist.Watched = WatchlistCategory{Data: parseProfileTabAnimeTable(document.Find("a[name=state0]").Next())}
+	watchlist.CurrentlyWatching = WatchlistCategory{Data: parseProfileTabAnimeTable(document.Find("a[name=state1]").Next())}
+	watchlist.ToWatch = WatchlistCategory{Data: parseProfileTabAnimeTable(document.Find("a[name=state2]").Next())}
+	watchlist.StoppedWatching = WatchlistCategory{Data: parseProfileTabAnimeTable(document.Find("a[name=state3]").Next())}
 
 	return watchlist, nil
 }
@@ -274,7 +279,7 @@ func getAttribute(node *html.Node, name string) string {
 	return ""
 }
 
-func parseTable(table *goquery.Selection) []*Anime {
+func parseProfileTabAnimeTable(table *goquery.Selection) []*Anime {
 	spaceCleaner := regexp.MustCompile(`\s{2,}`)
 	rows := table.Children().Children()
 	animes := make([]*Anime, 0, rows.Size()-2)
