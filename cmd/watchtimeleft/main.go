@@ -9,7 +9,7 @@ import (
 )
 
 func main() {
-	watchlist, parseError := parse.ParseProfileTabAnime(os.Stdin)
+	watchlist, parseError := parse.ParseProfileMediaTab(os.Stdin)
 	if parseError != nil {
 		panic(parseError)
 	}
@@ -32,7 +32,7 @@ func main() {
 	fmt.Printf("%s hours (%d anime) on currently watching list.\n", currentlyWatchingLeft, len(watchlist.CurrentlyWatching.Data))
 }
 
-func getWatchtimeLeft(anime *parse.Anime) time.Duration {
+func getWatchtimeLeft(anime *parse.Media) time.Duration {
 	switch anime.Type {
 	case parse.Series:
 		return time.Duration(time.Duration(anime.EpisodeCount-anime.EpisodesWatched) * 20 * time.Minute)

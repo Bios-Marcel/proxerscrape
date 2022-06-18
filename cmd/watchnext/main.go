@@ -9,20 +9,18 @@ import (
 )
 
 func main() {
-	watchlist, parseError := proxerscrape.ParseProfileTabAnime(os.Stdin)
+	animeWatchlist, parseError := proxerscrape.ParseProfileMediaTab(os.Stdin)
 	if parseError != nil {
 		panic(parseError)
 	}
 
-	cache := proxerscrape.Cache{
-		Query: proxerscrape.QueryRateLimited,
-	}
-	if err := watchlist.ToWatch.LoadExtraData(cache.RetrieveAnimeRawData); err != nil {
+	cache := proxerscrape.CreateDefaultCache()
+	if err := animeWatchlist.ToWatch.LoadExtraData(cache.RetrieveAnimeRawData); err != nil {
 		panic(err)
 	}
 
-	orderedByReview := make([]*proxerscrape.Anime, len(watchlist.ToWatch.Data))
-	copy(orderedByReview, watchlist.ToWatch.Data)
+	orderedByReview := make([]*proxerscrape.Media, len(animeWatchlist.ToWatch.Data))
+	copy(orderedByReview, animeWatchlist.ToWatch.Data)
 
 	//First we filter pre-airing ones, since we can't watch them anyway.
 	for i := 0; i < len(orderedByReview); i++ {
